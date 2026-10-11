@@ -25,8 +25,12 @@ echo "[1/5] Setting active project..."
 gcloud config set project "$PROJECT_ID"
 
 # 2. Enable necessary APIs
-echo "[2/5] Enabling Artifact Registry, Cloud Build & Cloud Run APIs..."
-gcloud services enable artifactregistry.googleapis.com cloudbuild.googleapis.com run.googleapis.com
+echo "[2/5] Enabling Artifact Registry, Cloud Build, Storage & Cloud Run APIs..."
+gcloud services enable \
+  artifactregistry.googleapis.com \
+  cloudbuild.googleapis.com \
+  storage.googleapis.com \
+  run.googleapis.com
 
 # 3. Create Artifact Registry Docker repo if it doesn't exist
 echo "[3/5] Checking Artifact Registry repository '$REPO_NAME'..."
@@ -41,10 +45,19 @@ else
   echo "Repository '$REPO_NAME' already exists."
 fi
 
-# 4. Build with Cloud Build
+# 4. Build and Push Image
 IMAGE_TAG="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$SERVICE_NAME:latest"
-echo "[4/5] Building and pushing image with Cloud Build: $IMAGE_TAG..."
-gcloud builds submit --tag "$IMAGE_TAG"
+echo "[4/5] Building container image: $IMAGE_TAG..."
+
+if command -v docker &>/dev/null && docker info &>/dev/null; then
+  echo "Docker detected. Building directly in Cloud Shell to bypass Cloud Storage staging permissions..."
+  gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+  docker build -t "$IMAGE_TAG" .
+  docker push "$IMAGE_TAG"
+else
+  echo "Submitting build to Google Cloud Build..."
+  gcloud builds submit --tag "$IMAGE_TAG"
+fi
 
 # 5. Deploy to Cloud Run with strict limits
 echo "[5/5] Deploying service to Cloud Run..."
