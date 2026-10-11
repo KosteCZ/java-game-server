@@ -1,0 +1,10 @@
+target/
+.git/
+.gitignore
+.idea/
+*.iml
+.mvn/wrapper/maven-wrapper.jar
+*.log
+Dockerfile
+README.md
+.system_generated/

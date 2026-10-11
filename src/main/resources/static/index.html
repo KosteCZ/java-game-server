@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multiplayer Game Server - STOMP Client</title>
+  <!-- STOMP.js UMD library via jsDelivr CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --cell-bg: #334155;
+      --cell-hover: #475569;
+      --cell-active: #2563eb;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Header & Status */
+    .header {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .title-group h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .title-group p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      transition: all 0.3s ease;
+    }
+
+    .status-badge.connected {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .status-badge.connecting {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-badge.connected .status-dot {
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.2); }
+    }
+
+    /* Controls Section */
+    .controls-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 160px;
+    }
+
+    label {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+    }
+
+    input[type="text"] {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text-main);
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--primary);
+    }
+
+    input:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #dc2626;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Main Content Layout (Grid + Activity Log) */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Game Board Card */
+    .board-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .board-header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .game-board {
+      display: grid;
+      grid-template-columns: repeat(3, 90px);
+      grid-template-rows: repeat(3, 90px);
+      gap: 10px;
+      margin: 10px 0;
+    }
+
+    .cell {
+      background: var(--cell-bg);
+      border: 2px solid transparent;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--text-main);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease-in-out;
+    }
+
+    .cell:hover:not(.disabled) {
+      background: var(--cell-hover);
+      border-color: var(--primary);
+      transform: scale(1.02);
+    }
+
+    .cell.disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .cell.last-move {
+      border-color: var(--success);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+    }
+
+    /* Activity Log Card */
+    .log-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 380px;
+    }
+
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .log-header h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .btn-small {
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      background: var(--cell-bg);
+      color: var(--text-muted);
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+      cursor: pointer;
+    }
+
+    .btn-small:hover {
+      color: var(--text-main);
+      background: var(--cell-hover);
+    }
+
+    .log-container {
+      flex: 1;
+      background: #090d16;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .log-entry {
+      line-height: 1.4;
+      word-break: break-all;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .log-time {
+      color: #64748b;
+      margin-right: 6px;
+    }
+
+    .log-type-info { color: #38bdf8; }
+    .log-type-success { color: #4ade80; }
+    .log-type-warning { color: #facc15; }
+    .log-type-error { color: #f87171; }
+    .log-type-move { color: #c084fc; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header with Live Connection Status -->
+    <header class="header">
+      <div class="title-group">
+        <h1>Multiplayer STOMP Game Client</h1>
+        <p>Spring Boot 3 + Java 21 Virtual Threads Test Dashboard</p>
+      </div>
+      <div id="connectionStatus" class="status-badge">
+        <span class="status-dot"></span>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </header>
+
+    <!-- Room / Player Controls -->
+    <section class="controls-card">
+      <div class="form-group">
+        <label for="gameIdInput">Game ID (Room)</label>
+        <input type="text" id="gameIdInput" value="room-101" placeholder="e.g. room-101">
+      </div>
+      <div class="form-group">
+        <label for="playerIdInput">Player ID</label>
+        <input type="text" id="playerIdInput" value="" placeholder="e.g. player-1">
+      </div>
+      <button id="joinBtn" class="btn btn-primary" onclick="toggleConnection()">Join Room</button>
+    </section>
+
+    <!-- Main Content: Board & Activity Log -->
+    <main class="content-grid">
+      <!-- 3x3 Game Board Card -->
+      <section class="board-card">
+        <div class="board-header">
+          <span id="roomLabel">Room: None</span>
+          <span id="lastMoveLabel">Last Move: -</span>
+        </div>
+
+        <div class="game-board" id="gameBoard">
+          <!-- 3x3 Grid Buttons (0 to 8) -->
+          <button class="cell disabled" data-index="0" data-row="0" data-col="0" onclick="onCellClick(0, 0, 0)">-</button>
+          <button class="cell disabled" data-index="1" data-row="0" data-col="1" onclick="onCellClick(1, 0, 1)">-</button>
+          <button class="cell disabled" data-index="2" data-row="0" data-col="2" onclick="onCellClick(2, 0, 2)">-</button>
+          <button class="cell disabled" data-index="3" data-row="1" data-col="0" onclick="onCellClick(3, 1, 0)">-</button>
+          <button class="cell disabled" data-index="4" data-row="1" data-col="1" onclick="onCellClick(4, 1, 1)">-</button>
+          <button class="cell disabled" data-index="5" data-row="1" data-col="2" onclick="onCellClick(5, 1, 2)">-</button>
+          <button class="cell disabled" data-index="6" data-row="2" data-col="0" onclick="onCellClick(6, 2, 0)">-</button>
+          <button class="cell disabled" data-index="7" data-row="2" data-col="1" onclick="onCellClick(7, 2, 1)">-</button>
+          <button class="cell disabled" data-index="8" data-row="2" data-col="2" onclick="onCellClick(8, 2, 2)">-</button>
+        </div>
+
+        <button class="btn-small" onclick="resetBoard()">Reset Local Board View</button>
+      </section>
+
+      <!-- Live Activity Log Card -->
+      <section class="log-card">
+        <div class="log-header">
+          <h2>Live Activity Log</h2>
+          <button class="btn-small" onclick="clearLogs()">Clear Log</button>
+        </div>
+        <div class="log-container" id="logContainer">
+          <div class="log-entry">
+            <span class="log-time">[ready]</span>
+            <span class="log-type-info">Client initialized. Set Game ID and click "Join Room" to connect.</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // Application State
+    let stompClient = null;
+    let isConnected = false;
+    let activeGameId = null;
+    let activePlayerId = null;
+    let subscription = null;
+
+    // DOM Elements
+    const statusBadge = document.getElementById('connectionStatus');
+    const statusText = document.getElementById('statusText');
+    const gameIdInput = document.getElementById('gameIdInput');
+    const playerIdInput = document.getElementById('playerIdInput');
+    const joinBtn = document.getElementById('joinBtn');
+    const logContainer = document.getElementById('logContainer');
+    const roomLabel = document.getElementById('roomLabel');
+    const lastMoveLabel = document.getElementById('lastMoveLabel');
+    const cells = document.querySelectorAll('.cell');
+
+    // Auto-generate random Player ID on startup if not set
+    if (!playerIdInput.value) {
+      playerIdInput.value = 'player-' + Math.floor(1000 + Math.random() * 9000);
+    }
+
+    // Append formatted log messages to Activity Log
+    function addLog(message, type = 'info') {
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'log-time';
+      timeSpan.textContent = `[${timeStr}]`;
+
+      const msgSpan = document.createElement('span');
+      msgSpan.className = `log-type-${type}`;
+      msgSpan.textContent = ` ${message}`;
+
+      entry.appendChild(timeSpan);
+      entry.appendChild(msgSpan);
+      logContainer.appendChild(entry);
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function clearLogs() {
+      logContainer.innerHTML = '';
+      addLog('Log cleared.', 'info');
+    }
+
+    // Update connection status badge
+    function setConnectionState(state, text) {
+      statusBadge.className = 'status-badge ' + state;
+      statusText.textContent = text;
+    }
+
+    // Toggle Connect / Disconnect
+    function toggleConnection() {
+      if (isConnected) {
+        disconnectClient();
+      } else {
+        connectClient();
+      }
+    }
+
+    // Connect via STOMP over WebSocket
+    function connectClient() {
+      const gameId = gameIdInput.value.trim();
+      const playerId = playerIdInput.value.trim();
+
+      if (!gameId || !playerId) {
+        alert('Please specify both Game ID and Player ID.');
+        return;
+      }
+
+      activeGameId = gameId;
+      activePlayerId = playerId;
+
+      // Construct dynamic WebSocket URL compatible with local & Koyeb environments
+      const isSecure = window.location.protocol === 'https:';
+      const wsProtocol = isSecure ? 'wss:' : 'ws:';
+      const host = window.location.host || 'localhost:8080';
+      const brokerURL = `${wsProtocol}//${host}/ws-game`;
+
+      setConnectionState('connecting', 'Connecting...');
+      addLog(`Initiating connection to ${brokerURL}...`, 'info');
+      joinBtn.disabled = true;
+
+      // Initialize StompJs Client
+      stompClient = new StompJs.Client({
+        brokerURL: brokerURL,
+        reconnectDelay: 5000,
+        heartbeatIncoming: 10000,
+        heartbeatOutgoing: 10000,
+
+        onConnect: (frame) => {
+          isConnected = true;
+          setConnectionState('connected', 'Connected');
+          addLog(`STOMP session connected successfully!`, 'success');
+
+          // UI updates
+          joinBtn.textContent = 'Leave Room';
+          joinBtn.className = 'btn btn-danger';
+          joinBtn.disabled = false;
+          gameIdInput.disabled = true;
+          playerIdInput.disabled = true;
+          roomLabel.textContent = `Room: ${activeGameId}`;
+
+          enableBoard(true);
+
+          // Subscribe to topic: /topic/game/{gameId}
+          const topic = `/topic/game/${activeGameId}`;
+          addLog(`Subscribing to topic: ${topic}`, 'info');
+
+          subscription = stompClient.subscribe(topic, (message) => {
+            handleIncomingMessage(message);
+          });
+        },
+
+        onStompError: (frame) => {
+          addLog(`Broker error: ${frame.headers['message']} - ${frame.body}`, 'error');
+          console.error('STOMP error:', frame);
+        },
+
+        onWebSocketClose: (event) => {
+          addLog(`WebSocket connection closed (code: ${event.code})`, 'warning');
+          handleDisconnectCleanup();
+        },
+
+        onWebSocketError: (error) => {
+          addLog(`WebSocket error encountered.`, 'error');
+          console.error('WebSocket error:', error);
+        }
+      });
+
+      stompClient.activate();
+    }
+
+    // Disconnect and unsubscribe
+    function disconnectClient() {
+      if (stompClient) {
+        addLog('Disconnecting from server...', 'info');
+        if (subscription) {
+          subscription.unsubscribe();
+          subscription = null;
+        }
+        stompClient.deactivate();
+      }
+      handleDisconnectCleanup();
+    }
+
+    function handleDisconnectCleanup() {
+      isConnected = false;
+      setConnectionState('', 'Disconnected');
+      joinBtn.textContent = 'Join Room';
+      joinBtn.className = 'btn btn-primary';
+      joinBtn.disabled = false;
+      gameIdInput.disabled = false;
+      playerIdInput.disabled = false;
+      roomLabel.textContent = 'Room: None';
+      enableBoard(false);
+    }
+
+    // Toggle 3x3 board cell interaction
+    function enableBoard(enabled) {
+      cells.forEach(cell => {
+        if (enabled) {
+          cell.classList.remove('disabled');
+        } else {
+          cell.classList.add('disabled');
+        }
+      });
+    }
+
+    // Handle user move by publishing GameAction to /app/game/{gameId}/move
+    function onCellClick(index, row, col) {
+      if (!isConnected || !stompClient) {
+        alert('Please join a room before making moves!');
+        return;
+      }
+
+      const payload = {
+        playerId: activePlayerId,
+        moveData: {
+          index: index,
+          row: row,
+          col: col
+        }
+      };
+
+      const destination = `/app/game/${activeGameId}/move`;
+      addLog(`Publishing move to ${destination}: index=${index} [${row},${col}]`, 'info');
+
+      stompClient.publish({
+        destination: destination,
+        body: JSON.stringify(payload)
+      });
+    }
+
+    // Handle incoming verified GameState broadcast from /topic/game/{gameId}
+    function handleIncomingMessage(message) {
+      try {
+        const gameState = JSON.parse(message.body);
+        addLog(`[GameState Broadcast] lastMoveBy="${gameState.lastMoveBy}" status="${gameState.status}"`, 'move');
+        addLog(`Payload: ${JSON.stringify(gameState.moveData)}`, 'info');
+
+        // Update UI board representation
+        updateBoard(gameState);
+      } catch (err) {
+        addLog(`Failed to parse incoming GameState: ${err.message}`, 'error');
+      }
+    }
+
+    // Visually update the 3x3 grid
+    function updateBoard(gameState) {
+      lastMoveLabel.textContent = `Last Move: ${gameState.lastMoveBy || '-'}`;
+
+      if (gameState.moveData && typeof gameState.moveData.index !== 'undefined') {
+        const moveIdx = gameState.moveData.index;
+        const targetCell = document.querySelector(`.cell[data-index="${moveIdx}"]`);
+
+        if (targetCell) {
+          // Clear previous highlight
+          cells.forEach(c => c.classList.remove('last-move'));
+
+          // Highlight cell and mark with player identifier
+          targetCell.classList.add('last-move');
+          targetCell.textContent = gameState.lastMoveBy.substring(0, 3).toUpperCase();
+        }
+      }
+    }
+
+    function resetBoard() {
+      cells.forEach(c => {
+        c.textContent = '-';
+        c.classList.remove('last-move');
+      });
+      lastMoveLabel.textContent = 'Last Move: -';
+      addLog('Reset local board representation.', 'info');
+    }
+  </script>
+</body>
+</html>

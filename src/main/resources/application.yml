@@ -1,0 +1,60 @@
+server:
+  port: ${PORT:8080}
+  tomcat:
+    threads:
+      # Bounded tightly for 512MB RAM ceiling
+      max: 20
+      min-spare: 2
+    # Limit max connections and accept count to prevent OOM under load spikes
+    max-connections: 200
+    accept-count: 20
+
+spring:
+  application:
+    name: java-game-server
+
+  # Disable JMX to save heap and metaspace memory overhead
+  jmx:
+    enabled: false
+
+  # Enable Project Loom Virtual Threads for high-concurrency, low-memory WebSocket execution
+  threads:
+    virtual:
+      enabled: true
+
+  # External Supabase (PostgreSQL) DataSource Configuration
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/postgres}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # Sized conservatively for Supabase Free Tier (limited connection pool) & 512MB container RAM
+      maximum-pool-size: 5
+      minimum-idle: 1
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+      pool-name: GameServerHikariCP
+      # Do not fail context startup if external Supabase DB takes time during cold start
+      initialization-fail-timeout: -1
+
+  jpa:
+    open-in-view: false # Crucial: avoid holding DB connections open across WebSocket sessions
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:none}
+    properties:
+      hibernate:
+        # Explicitly declare dialect so Hibernate can boot even before DB connectivity is established
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc:
+          lob:
+            non_contextual_creation: true
+
+# Logging level optimized to keep I/O and memory minimal
+logging:
+  level:
+    root: INFO
+    com.gameserver: DEBUG
+    org.springframework.web.socket: INFO
