@@ -14,6 +14,12 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    private final TopicSubscriptionInterceptor topicSubscriptionInterceptor;
+
+    public WebSocketConfig(TopicSubscriptionInterceptor topicSubscriptionInterceptor) {
+        this.topicSubscriptionInterceptor = topicSubscriptionInterceptor;
+    }
+
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         // Simple in-memory message broker carrying messages back to connected clients on /topic
@@ -33,5 +39,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.addEndpoint("/ws-game")
                 .setAllowedOriginPatterns("*")
                 .withSockJS();
+    }
+
+    @Override
+    public void configureClientInboundChannel(org.springframework.messaging.simp.config.ChannelRegistration registration) {
+        // Secure inbound STOMP frames with JWT validation and subscription permission checks
+        registration.interceptors(topicSubscriptionInterceptor);
     }
 }

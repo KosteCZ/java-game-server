@@ -52,6 +52,11 @@ spring:
           lob:
             non_contextual_creation: true
 
+# JWT Authentication Configuration
+jwt:
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24h
+
 # Logging level optimized to keep I/O and memory minimal
 logging:
   level:
